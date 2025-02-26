@@ -1,28 +1,24 @@
 from sqlalchemy.orm import Session
 from app.models.user import User
-from typing import Optional
+from typing import Protocol, Optional
 
-class UserRepositoryInterface:
-    def get_user_by_id(self, db: Session, id: str) -> Optional[User]:
-        pass
+class UserRepositoryInterface(Protocol):
+    def get_user_by_id(self, id: str) -> Optional[User]:
+        ...
 
-    def create_user(self, db: Session, user: User) -> User:
-        pass
+    def create_user(self, user: User) -> User:
+        ...
 
 
-class UserRepository(UserRepositoryInterface):
-    def get_user_by_id(self, db: Session, id: str ) -> Optional[User]:
-        return db.get(User, id)
+class UserRepository:
+    def __init__(self, db: Session):
+        self.db = db
 
-    def create_user(self, db: Session, user: User) -> User:
-        db_user = User(
-            uuid=user.uuid,
-            name=user.name,
-            job_type=user.job_type,
-            job=user.job
-        )
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+    def get_user_by_id(self, id: str) -> Optional[User]:
+        return self.db.get(User, id)
 
-        return db_user
+    def create_user(self, user: User) -> User:
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
