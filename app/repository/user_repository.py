@@ -3,7 +3,7 @@ from app.models.user import User
 from typing import Optional
 
 class UserRepositoryInterface:
-    def get_user_by_uuid(self, db: Session, uuid: str) -> Optional[User]:
+    def get_user_by_id(self, db: Session, id: str) -> Optional[User]:
         pass
 
     def create_user(self, db: Session, user: User) -> User:
@@ -11,8 +11,8 @@ class UserRepositoryInterface:
 
 
 class UserRepository(UserRepositoryInterface):
-    def get_user_by_uuid(self, db: Session, uuid: str) -> Optional[User]:
-        return db.get(User).filter(User.uuid == uuid).first()
+    def get_user_by_id(self, db: Session, id: str ) -> Optional[User]:
+        return db.get(User, id)
 
     def create_user(self, db: Session, user: User) -> User:
         db_user = User(
