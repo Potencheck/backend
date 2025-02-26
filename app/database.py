@@ -19,6 +19,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+# 모델 추가
+from app.models.user import User
+
+Base.metadata.create_all(bind=engine)
+
 def get_db():
     db = SessionLocal()
     try:
