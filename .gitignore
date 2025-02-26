@@ -1,1 +1,52 @@
-.venv
+# 🔹 Python 관련
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.spec
+
+# 🔹 환경 설정 파일
+.env
+*.env
+*.ini
+*.cfg
+*.json
+
+# 🔹 PyCharm 관련
+.idea/
+.vscode/
+
+# 🔹 Virtual Environment (가상환경)
+venv/
+.env/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 🔹 FastAPI 관련 (Uvicorn, Gunicorn 등)
+*.log
+*.db
+instance/
+logs/
+db.sqlite3
+
+# 🔹 MyPy, Pytest 관련
+.mypy_cache/
+.pytest_cache/
+coverage.xml
+htmlcov/
+.coverage
+
+# 🔹 Docker 관련
+docker-compose.override.yml
+.dockerignore
+*.dockerfile
+
+# 🔹 Jupyter Notebook 관련
+.ipynb_checkpoints/
+
+# 🔹 MacOS, Linux 관련
+.DS_Store
