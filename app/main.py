@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.router.user_router import router as user_router
 from app.database import Base, engine
+from dotenv import load_dotenv
 app = FastAPI()
 
 
@@ -8,7 +9,7 @@ app = FastAPI()
 Base.metadata.create_all(bind=engine)
 
 app.include_router(user_router)
-
+load_dotenv()
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
