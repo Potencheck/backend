@@ -99,9 +99,40 @@ class ResumeExtract:
             'seed': 0
         }
 
-        response = self.executor.execute(request_data)
+        # API 요청하여 응답 받기
+        raw_response = self.executor.execute(request_data)
+
         try:
-            extracted_json = json.loads(response)
+            # 문자열 응답을 먼저 JSON으로 파싱
+            response_dict = json.loads(raw_response)
+
+            # message.content 필드에서 실제 JSON 추출
+            if 'message' in response_dict and 'content' in response_dict['message']:
+                content_str = response_dict['message']['content']
+                # content 문자열을 다시 JSON으로 파싱
+                content_json = json.loads(content_str)
+                return content_json
+            else:
+                # 예상치 못한 응답 구조인 경우
+                return {
+                    "error": "Unexpected API response structure",
+                    "career": [],
+                    "activities": [],
+                    "certifications": []
+                }
         except json.JSONDecodeError as e:
-            raise ValueError(f"JSON 파싱 실패: {e}\n응답 텍스트: {response}")
-        return extracted_json
+            # JSON 파싱 실패 시 오류 정보 포함하여 반환
+            return {
+                "error": f"JSON parsing error: {str(e)}",
+                "career": [],
+                "activities": [],
+                "certifications": []
+            }
+        except Exception as e:
+            # 기타 예외 발생 시
+            return {
+                "error": f"Error processing API response: {str(e)}",
+                "career": [],
+                "activities": [],
+                "certifications": []
+            }

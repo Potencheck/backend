@@ -14,7 +14,7 @@ class UserServiceInterface(Protocol):
         ...
 
 
-class UserService:
+class UserService(UserServiceInterface):
     def __init__(self, user_repository: UserRepositoryInterface):
         self.user_repository = user_repository
 
