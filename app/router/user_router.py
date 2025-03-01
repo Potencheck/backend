@@ -10,7 +10,7 @@ router = APIRouter(
 )
 
 @router.post("/data", status_code=status.HTTP_201_CREATED, response_model=dict)
-def create_user(
+async def create_user(
         user: UserCreate,
         user_service: UserServiceInterface =Depends(get_user_service)
 ):

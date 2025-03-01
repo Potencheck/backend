@@ -8,8 +8,9 @@ class UserBase(BaseModel):
     job: str
 
 class UserCreate(UserBase):
-    # 사용자 생성 요청 스키마
-    pass
+    name: str
+    job_type: str
+    job: str
 
 class User(UserBase):
     UUID: str
