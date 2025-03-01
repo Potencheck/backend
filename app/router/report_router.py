@@ -2,13 +2,16 @@ import logging
 import json
 import os
 import uuid
+import time
+import re
+import traceback
 from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.schemas.report_schema import CareerInputSchema, ReportInput, Report
 from app.database import get_db, get_collection
-from app.util.completion_excute import ResumeExtract
 from app.util.pdf_extractor import PDFExtractor
 from motor.motor_asyncio import AsyncIOMotorDatabase
+import requests
 
 router = APIRouter(
     prefix="/report",
@@ -65,57 +68,174 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List)
     logger.debug(f"트렌드 스킬: {trend_skills}")
     logger.debug(f"트렌드 JD: {[item['name'] for item in trend_jd]}")
     
-    resume_extractor = ResumeExtract(
-        host='https://clovastudio.stream.ntruss.com',
-        request_id='resume_analysis'
-    )
+    # API 키 가져오기
+    clova_key = os.getenv("CLOVA_KEY")
     
-    # 분석 요청 프롬프트 구성
-    prompt = f"""
-    다음 이력서를 분석하고 요청된 정보를 추출해주세요:
+    if not clova_key:
+        logger.error("CLOVA_KEY 환경 변수가 설정되지 않았습니다")
+        raise HTTPException(
+            status_code=500,
+            detail="서버 구성 오류: AI 분석을 위한 API 키가 설정되지 않았습니다. 관리자에게 문의하세요."
+        )
     
-    이력서:
-    {resume_text[:1000]}... (이하 생략)
+    # 시스템 프롬프트와 사용자 프롬프트 구성
+    system_prompt = """이력서를 분석하여 지원자의 역량을 평가하고 다음 JSON 형식으로만 응답해주세요. 추가 설명이나 주석은 사용하지 마세요.
+
+{
+  "my_trend_skill": ["스킬1", "스킬2", ...],
+  "personal_skill": [
+    {"skill": "역량1", "description": "근거1,2,3~에서 추출한 역량"},
+    {"skill": "역량2", "description": "근거2~에서 추출한 역량"},
+    ...
+  ],
+  "ai_summary": "짧은 한 문장 요약",
+  "career_fitness": 80,
+  "ai_review": "직군 적합성에 대한 피드백"
+}
+
+각 필드 작성 지침:
+1. my_trend_skill:
+   - 해당 직무의 대표 소프트스킬/하드스킬 중 지원자가 실제로 갖춘 것만 포함
+   - 지원자의 역량이 0-100점 척도로 60점 이상인 스킬만 포함
+
+2. personal_skill:
+   - 트렌드 역량은 아니지만 지원자만의 특색 있는 매력적인 역량 나열
+   - 각 역량마다 반드시 description 필드 포함하여 근거 제시
+   - 제시된 말투를 반드시 그대로 유지할 것
+   - 근거는 반드시 이력서에 나타난 내용을 기반으로 작성할 것
+
+3. ai_summary:
+   - 형식: "{사용자의 장점}하는 {희망직무}계의 {직무와 관련없는 비유 인물}"
+   - 예시: "데이터로 고객 마음을 사로잡는 디자인계의 허준"
+   - 짧고 임팩트 있는 한 문장으로 작성
+
+4. career_fitness:
+   - 지원자의 이력서와 선택한 직무의 jd간 유사도를 백분위 숫자로 표현
+   - 예: 83% 매치되면 83으로 표기
+   - 중요: 이력서의 기술 스택, 경험, 프로젝트가 희망 직무와 완전히 다른 분야일 경우 30% 이하로 평가할 것
+   - 기술 스택과 경험이 희망 직무와 일부 관련이 있지만 직접적이지 않은 경우 31-70% 사이로 평가
+   - 기술 스택과 경험이 희망 직무와 직접적으로 관련이 있는 경우에만 70% 이상으로 평가
+
+5. ai_review:
+   - 해당 직군에 적합한/적합하지 않은 이유를 간략하게 제시
+   - 긍정적이고 유익한 피드백 제공
+   - 이력서와 희망 직무 간 불일치가 클 경우, 전환을 위해 필요한 보완점 중심으로 작성
+   - 예시 말투 유지: "프로덕트 디자이너에게 요구되는 핵심 역량을 두루 갖추고 있네요! 특히 데이터 기반 개선 경험이 강점입니다. 이를 더욱 돋보이게 하려면, 어떤 데이터를 활용했고, 구체적으로 어떤 문제를 해결했으며, 개선 결과가 사용자 경험이나 비즈니스 성과에 어떤 영향을 미쳤는지 정리해보면 더욱 효과적일 것입니다."
+"""
     
-    트렌드 스킬: {trend_skills}
-    트렌드 JD: {[item['name'] for item in trend_jd]}
+    user_prompt = f"""다음 이력서를 분석하고 요청된 정보를 추출해주세요:
     
-    다음 정보를 추출해주세요:
-    1. 이력서에 나타난 트렌드 스킬 (최대 4개)
-    2. 이력서에 나타나지 않았지만 강조할만한 퍼스널 역량 4개 (역량명과 근거)
-    3. 이력서에 대한 위트있는 한 문장 요약
-    4. 직무 적합도 점수(0-100)와 그 이유, 개선 제안
-    
-    반드시 다음 JSON 형식으로 응답해주세요:
-    {{
-      "my_trend_skill": ["스킬1", "스킬2", ...],
-      "personal_skill": [
-        {{"skill": "역량1", "description": "근거1"}},
-        {{"skill": "역량2", "description": "근거2"}},
-        ...
-      ],
-      "ai_summary": "한 문장 요약",
-      "career_fitness": 80,
-      "ai_review": "적합도 이유 및 개선 제안"
-    }}
-    
-    모든 필드를 반드시 채워주세요.
-    """
+이력서:
+{resume_text[:3000]}... (이하 생략)
+
+트렌드 스킬: {trend_skills}
+트렌드 JD: {[item['name'] for item in trend_jd]}
+
+다음 정보를 추출해주세요:
+1. 이력서에 나타난 트렌드 스킬 (최대 4개)
+2. 이력서에 나타나지 않았지만 강조할만한 퍼스널 역량 4개 (역량명과 근거)
+3. 이력서에 대한 위트있는 한 문장 요약
+4. 직무 적합도 점수(0-100)와 그 이유, 개선 제안
+
+반드시 JSON 형식으로만 응답해주세요."""
     
     try:
-        logger.debug("Clova AI API 호출 시작")
-        result = resume_extractor.extract_custom(prompt)
-        logger.debug(f"Clova AI 응답 결과: {json.dumps(result, ensure_ascii=False, indent=2)}")
+        logger.debug("Clova Studio API 호출 시작")
         
-        # 결과 검증
-        if not validate_ai_result(result):
-            logger.error("AI 응답 검증 실패: 필수 필드가 누락되었습니다")
-            raise ValueError("AI 응답 형식이 올바르지 않습니다. 필수 필드가 누락되었습니다.")
+        # API 요청 헤더
+        headers = {
+            "Authorization": f"Bearer {clova_key}",
+            "X-NCP-CLOVASTUDIO-REQUEST-ID": f"resume-analysis-{int(time.time())}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        
+        # API 요청 본문 구성
+        request_data = {
+            'messages': [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            'topP': 0.8,
+            'topK': 0,
+            'maxTokens': 4096,
+            'temperature': 0.8,
+            'repeatPenalty': 5.0,
+            'stopBefore': [],
+            'includeAiFilters': True
+        }
+        
+        # API 호출
+        url = "https://clovastudio.stream.ntruss.com/testapp/v1/chat-completions/HCX-003"
+        logger.debug(f"API 요청 URL: {url}")
+        
+        response = requests.post(
+            url,
+            headers=headers,
+            json=request_data,
+            timeout=30
+        )
+        
+        # 응답 확인 강화
+        if response.status_code != 200:
+            logger.error(f"Clova API 오류 응답: 상태 코드 {response.status_code}")
+            logger.error(f"응답 내용: {response.text}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"AI 서비스 응답 오류: {response.status_code}. 관리자에게 문의하세요."
+            )
+        
+        # 응답 처리
+        try:
+            response_json = response.json()
+            logger.debug(f"API 응답 전체: {json.dumps(response_json, ensure_ascii=False)}")
             
-        logger.debug("=== 이력서 AI 분석 완료 ===")
-        return result
+            # 명확한 응답 구조 확인
+            if "result" in response_json and "message" in response_json["result"] and "content" in response_json["result"]["message"]:
+                content = response_json["result"]["message"]["content"]
+                logger.debug(f"추출된 콘텐츠: {content[:200]}...")
+            else:
+                logger.error(f"예상 응답 구조를 찾을 수 없습니다: {json.dumps(response_json, ensure_ascii=False)[:500]}...")
+                raise HTTPException(
+                    status_code=500,
+                    detail="AI 서비스 응답 형식이 변경되었습니다. 관리자에게 문의하세요."
+                )
+            
+            # JSON 파싱 전 유효성 검사
+            if not content or not content.strip():
+                logger.error("추출된 콘텐츠가 비어 있습니다")
+                raise ValueError("API 응답에서 추출된 콘텐츠가 비어 있습니다")
+            
+            # JSON 부분 추출 및 로깅 강화
+            try:
+                json_match = re.search(r'({.*})', content, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1).strip()
+                    logger.debug(f"추출된 JSON 문자열: {json_str[:200]}...")
+                    result = json.loads(json_str)
+                    logger.debug("JSON 객체 추출 성공!")
+                else:
+                    # 전체 텍스트가 JSON인 경우
+                    logger.debug(f"JSON 전체 파싱 시도: {content[:200]}...")
+                    result = json.loads(content)
+                    logger.debug("전체 텍스트를 JSON으로 파싱 성공!")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 파싱 실패: {str(e)}, 콘텐츠 일부: {content[:300]}...")
+                raise ValueError(f"API 응답의 JSON 형식이 잘못되었습니다: {str(e)}")
+            
+            # 결과 검증
+            if not validate_ai_result(result):
+                logger.error("AI 응답 검증 실패: 필수 필드가 누락되었습니다")
+                raise ValueError("AI 응답 형식이 올바르지 않습니다. 필수 필드가 누락되었습니다.")
+                
+            logger.debug("=== 이력서 AI 분석 완료 ===")
+            return result
+        except Exception as e:
+            logger.error(f"응답 처리 중 오류 발생: {str(e)}")
+            raise
+            
     except Exception as e:
         logger.error(f"AI 분석 중 오류 발생: {str(e)}")
+        logger.error(f"오류 세부 정보: {traceback.format_exc()}")
         logger.debug("=== 이력서 AI 분석 실패, 더미 데이터 반환 ===")
         
         # 기본 더미 데이터 반환
@@ -225,7 +345,7 @@ async def create_report(
             },
             "career_fitness": ai_result.get('career_fitness', 70),
             "trend_jd": trend_jd,
-            "trend_skill": trend_skill,  # 소프트 스킬로 변경
+            "trend_skill": top_hard_skills,
             "my_trend_skill": ai_result.get('my_trend_skill', []),
             "personal_skill": ai_result.get('personal_skill', []),
             "ai_summary": ai_result.get('ai_summary', ''),
@@ -261,7 +381,6 @@ async def create_report(
         raise
     except Exception as e:
         logger.error(f"Error creating report: {str(e)}")
-        import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=500,
@@ -341,3 +460,28 @@ async def share_report(
             status_code=500,
             detail=f"Error sharing report: {str(e)}"
         )
+
+@router.get("/raw/{report_id}")
+async def get_raw_report(report_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """임시 디버깅용: 보고서 원본 데이터 조회"""
+    from bson.objectid import ObjectId
+    
+    reports_collection = get_collection("reports")
+    try:
+        # ObjectId로 변환하여 검색
+        report = await reports_collection.find_one({"_id": ObjectId(report_id)})
+        if not report:
+            return {"error": "보고서를 찾을 수 없습니다", "id": report_id}
+        
+        # ObjectId를 문자열로 변환
+        report["id"] = str(report["_id"])
+        del report["_id"]
+        
+        return report
+    except Exception as e:
+        import traceback
+        return {
+            "error": f"조회 중 오류 발생: {str(e)}",
+            "id": report_id,
+            "traceback": traceback.format_exc()
+        }
