@@ -39,8 +39,20 @@ services:
       - MONGO_PORT=${MONGO_PORT}
       - MONGO_DB=${MONGO_DB}
     volumes:
-      - ./app:/app/app
+      - .:/app
     restart: always
+    networks:
+      - app-network
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: nginx_container
+    ports:
+      - "80:80"
+    depends_on:
+      - fastapi
     networks:
       - app-network
 
