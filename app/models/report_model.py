@@ -19,7 +19,7 @@ class PyObjectId(ObjectId):
 
 class UserModel(BaseModel):
     name: str
-    job_type: str
+    exp: str
     job: str
 
 class TrendJDModel(BaseModel):

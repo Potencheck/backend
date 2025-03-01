@@ -4,9 +4,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# MongoDB 연결 문자열을 .env에서 가져오거나 기본값 사용
-MONGO_DETAILS = os.getenv("MONGO_DETAILS", "mongodb://localhost:27017")
-DB_NAME = os.getenv("DB_NAME", "poten_check_db")
+# MongoDB 연결 정보 구성
+MONGO_USER = os.getenv("MONGO_USER", "")
+MONGO_PASSWORD = os.getenv("MONGO_PASSWORD", "")
+MONGO_HOST = os.getenv("MONGO_HOST", "localhost")
+MONGO_PORT = os.getenv("MONGO_PORT", "27017")
+DB_NAME = os.getenv("MONGO_DB", "poten_check_db")
+
+# 인증 정보가 있는 연결 문자열 생성
+if MONGO_USER and MONGO_PASSWORD:
+    MONGO_DETAILS = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}"
+else:
+    MONGO_DETAILS = f"mongodb://{MONGO_HOST}:{MONGO_PORT}"
 
 # Motor 클라이언트 생성 및 데이터베이스 선택
 client = AsyncIOMotorClient(MONGO_DETAILS)

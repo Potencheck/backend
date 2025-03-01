@@ -20,6 +20,7 @@ class CareerInputSchema(BaseModel):
     personal_skill: List[PersonalSkillItem]
     ai_summary: str
     ai_review: str
+
 class ReportInput(BaseModel):
     user: UserBase
     career_fitness: int
