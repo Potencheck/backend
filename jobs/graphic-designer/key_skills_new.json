@@ -1,0 +1,55 @@
+{
+  "하드 스킬": {
+    "포토샵": 100,
+    "일러스트레이터": 97,
+    "Adobe Photoshop": 94,
+    "Adobe Creative Suite(Photoshop)": 91,
+    "Adobe Creative Suite(Illustrator)": 88,
+    "Adobe Illustrator": 85,
+    "디자인 툴 활용 능력": 82,
+    "illustrator": 79,
+    "그래픽 디자인": 76,
+    "Adobe Creative Suite(InDesign)": 73,
+    "시각화 능력": 70,
+    "캐릭터 및 스킨 디자인": 67,
+    "벡터 기반 그래픽 작업 툴 활용 능력": 64,
+    "미리캔버스": 61,
+    "Figma": 58
+  },
+  "소프트 스킬": {
+    "커뮤니케이션 능력": 95,
+    "구조적인 사고방식": 90,
+    "이해력과 기획력": 85,
+    "커뮤니케이션능력": 80,
+    "책임감": 75,
+    "창의성": 70,
+    "피드백 반영 능력": 65,
+    "협업능력": 60,
+    "창의적인 발상": 55,
+    "게임의 재미를 시각적으로 표현 할 수 있는 능력": 50
+  },
+  "분석 결과": "신입 graphic-designer에게 필요한 핵심 역량 분석 결과",
+  "하드 스킬(카테고리별)": {
+    "디자인 툴": {
+      "Adobe Photoshop": 94,
+      "Adobe Creative Suite(Photoshop)": 91,
+      "Adobe Creative Suite(Illustrator)": 88,
+      "Adobe Illustrator": 85,
+      "illustrator": 79,
+      "Adobe Creative Suite(InDesign)": 73,
+      "Figma": 58
+    },
+    "디자인 스킬": {
+      "그래픽 디자인": 76
+    },
+    "기타": {
+      "포토샵": 100,
+      "일러스트레이터": 97,
+      "디자인 툴 활용 능력": 82,
+      "시각화 능력": 70,
+      "캐릭터 및 스킨 디자인": 67,
+      "벡터 기반 그래픽 작업 툴 활용 능력": 64,
+      "미리캔버스": 61
+    }
+  }
+}

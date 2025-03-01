@@ -1,0 +1,55 @@
+{
+  "하드 스킬": {
+    "Figma": 100,
+    "Adobe Illustrator": 97,
+    "Adobe Photoshop": 94,
+    "UI 디자인": 91,
+    "웹 디자인": 88,
+    "Photoshop": 85,
+    "Adobe illustrator": 82,
+    "WEB/APP UI/UX": 79,
+    "UI/UX 디자인": 76,
+    "인터랙션 디자인": 73,
+    "UX/UI 설계": 70,
+    "디자인 툴(Figma, Sketch)": 67,
+    "Mobile, 반응형 Web 설계": 64,
+    "Adobe photoshop": 61,
+    "Illustrator": 58
+  },
+  "소프트 스킬": {
+    "문제 해결 능력": 95,
+    "다양한 직군과의 유연한 커뮤니케이션": 90,
+    "동시대적인 감각으로 폭넓은 컨셉 기획": 85,
+    "감각적인 비주얼 구현 능력": 80,
+    "팀 협업 능력": 75,
+    "개발자와 원활한 커뮤니케이션": 70,
+    "사용자 관점 및 비즈니스 이해를 통한 요구사항 분석 및 UI 설계와 디자인": 65,
+    "원활한 커뮤니케이션": 60,
+    "복잡한 정보, 기술, 정책 이해 및 솔루션 설계 능력": 55,
+    "협업 능력": 50
+  },
+  "분석 결과": "신입 product-designer에게 필요한 핵심 역량 분석 결과",
+  "하드 스킬(카테고리별)": {
+    "디자인 툴": {
+      "Figma": 100,
+      "Adobe Illustrator": 97,
+      "Adobe Photoshop": 94,
+      "Photoshop": 85,
+      "Adobe illustrator": 82,
+      "디자인 툴(Figma, Sketch)": 67,
+      "Adobe photoshop": 61,
+      "Illustrator": 58
+    },
+    "디자인 스킬": {
+      "UI 디자인": 91,
+      "UI/UX 디자인": 76,
+      "인터랙션 디자인": 73
+    },
+    "기타": {
+      "웹 디자인": 88,
+      "WEB/APP UI/UX": 79,
+      "UX/UI 설계": 70,
+      "Mobile, 반응형 Web 설계": 64
+    }
+  }
+}

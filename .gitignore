@@ -50,3 +50,9 @@ docker-compose.override.yml
 
 # 🔹 MacOS, Linux 관련
 .DS_Store
+
+# 모든 JSON 파일을 무시
+*.json
+
+# jobs/ 디렉토리의 JSON 파일은 예외 처리
+!jobs/**/*.json

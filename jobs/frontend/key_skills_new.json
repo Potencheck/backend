@@ -1,0 +1,55 @@
+{
+  "하드 스킬": {
+    "React": 100,
+    "TypeScript": 97,
+    "JavaScript": 94,
+    "Next.js": 91,
+    "JSX": 88,
+    "Javascript": 85,
+    "React.js": 82,
+    "HTML/CSS": 79,
+    "Rust": 76,
+    "Flutter/Dart": 73,
+    "모던 웹 개발(React, Vue 등)": 70,
+    "React-Native": 67,
+    "HTML": 64,
+    "CSS": 61,
+    "WebAssembly": 58
+  },
+  "소프트 스킬": {
+    "문제 해결력": 95,
+    "주도적 문제 해결": 90,
+    "기술과 제품에 대한 열정": 85,
+    "서비스 운영 마인드": 80,
+    "주도적인 문제 해결 능력": 75,
+    "문제 해결 능력": 70,
+    "논리적 사고력": 65,
+    "학습 내용 공유 및 상호 도움": 60,
+    "팀 플레이어": 55,
+    "호기심": 50
+  },
+  "분석 결과": "신입 frontend에게 필요한 핵심 역량 분석 결과",
+  "하드 스킬(카테고리별)": {
+    "언어": {
+      "TypeScript": 97,
+      "JavaScript": 94,
+      "Javascript": 85,
+      "HTML/CSS": 79,
+      "HTML": 64,
+      "CSS": 61
+    },
+    "프레임워크/라이브러리": {
+      "React": 100,
+      "Next.js": 91,
+      "React.js": 82,
+      "모던 웹 개발(React, Vue 등)": 70,
+      "React-Native": 67
+    },
+    "기타": {
+      "JSX": 88,
+      "Rust": 76,
+      "Flutter/Dart": 73,
+      "WebAssembly": 58
+    }
+  }
+}
