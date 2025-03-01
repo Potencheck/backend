@@ -301,8 +301,8 @@ async def create_report(
         logger.debug(f"이력서에서 추출된 텍스트 길이: {len(resume_text)} 자")
         
         # 직무별 스킬 데이터 로드
-        job = user_data.get('job', '')
-        exp = user_data.get('exp', 'new')
+        job = user_data.get('user', {}).get('job', '')
+        exp = user_data.get('user', {}).get('exp', 'new')
         logger.info(f"직무: {job}, 경력: {exp}")
         
         skills_data = load_job_skills(job, exp)
