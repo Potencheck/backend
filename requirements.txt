@@ -5,13 +5,16 @@ cffi==1.17.1
 charset-normalizer==3.4.1
 click==8.1.8
 cryptography==44.0.1
+dnspython==2.7.0
 fastapi==0.115.8
 h11==0.14.0
 idna==3.10
+motor==3.7.0
 psycopg2-binary==2.9.10
 pycparser==2.22
 pydantic==2.10.6
 pydantic_core==2.27.2
+pymongo==4.11.1
 PyPDF2==3.0.1
 python-dotenv==1.0.1
 python-multipart==0.0.20

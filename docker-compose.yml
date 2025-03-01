@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: mongo_container
     restart: always
     environment:
@@ -14,14 +14,18 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongo --username ${MONGO_USER} --password ${MONGO_PASSWORD} --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 })' localhost:27017"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
       retries: 5
-      start_period: 10s
+      start_period: 30s
+    networks:
+      - app-network
 
   fastapi:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: fastapi-container
     depends_on:
       db:
@@ -35,10 +39,14 @@ services:
       - MONGO_PORT=${MONGO_PORT}
       - MONGO_DB=${MONGO_DB}
     volumes:
-      - .:/app
+      - ./app:/app/app
     restart: always
-    command: >
-      sh -c "sleep 5 && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   mongo_data:
