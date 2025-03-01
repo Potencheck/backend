@@ -20,9 +20,7 @@ class CareerInputSchema(BaseModel):
     personal_skill: List[PersonalSkillItem]
     ai_summary: str
     ai_review: str
-
-class Report(BaseModel):
-    id: str
+class ReportInput(BaseModel):
     user: UserBase
     career_fitness: int
     trend_jd: List[TrendJDItem]
@@ -31,3 +29,6 @@ class Report(BaseModel):
     personal_skill: List[PersonalSkillItem]
     ai_summary: str
     ai_review: str
+
+class Report(ReportInput):
+    id: str
