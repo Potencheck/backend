@@ -17,7 +17,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://frontend-delta-ruddy.vercel.app",
-        "http://potencheck.site"
+        "http://potencheck.site",
+        "https://api.potencheck.site",
+        "https://potenday.potencheck.site"
     ],
     allow_credentials=True,
     allow_methods=["*"],
