@@ -284,7 +284,7 @@ def validate_ai_result(result: Dict) -> bool:
     
     return True
 
-@router.post("/")
+@router.post("")
 async def create_report(
     user_json: str = Form(...),
     file: UploadFile = File(...),
