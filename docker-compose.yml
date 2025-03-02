@@ -51,8 +51,23 @@ services:
     container_name: nginx_container
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - fastapi
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot_container
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'while true; do sleep 3600; done'"
     networks:
       - app-network
 
