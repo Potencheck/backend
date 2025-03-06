@@ -59,3 +59,40 @@ async def extract_career_from_resume(
     except Exception as e:
         logger.error(f"Error processing the file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing the file: {str(e)}")
+
+@router.get("/experience/link/{link_url:path}")
+async def extract_career_from_url(
+        link_url: str,
+        career_service: CareerServiceInterface = Depends(get_career_service)
+) -> Dict[str, Any]:
+    """
+    Extracts career information from a given Notion published resume link.
+
+    Args:
+        link_url (str): The Notion public URL of the resume.
+
+    Returns:
+        JSON object containing extracted career, activities, and certifications.
+    """
+    logger.info(f"Received request to extract career from URL: {link_url}")
+
+    try:
+        # Extract career info from the URL - 비동기 호출로 변경
+        logger.info("Extracting career information from the provided URL...{}".format(link_url))
+        result = await career_service.extract_career_from_url(link_url)
+
+        logger.info("Parsing the extracted result...")
+        if isinstance(result, dict):
+            return result
+        elif isinstance(result, str):
+            try:
+                parsed_result = json.loads(result)
+                return parsed_result
+            except json.JSONDecodeError:
+                return {"error": "Invalid JSON response", "raw_result": result}
+        else:
+            return {"error": "Unexpected result type", "raw_result": str(result)}
+
+    except Exception as e:
+        logger.error(f"Error processing the URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing the URL: {str(e)}")
