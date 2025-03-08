@@ -5,7 +5,7 @@ import uuid
 import time
 import re
 import traceback
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.schemas.report_schema import CareerInputSchema, ReportInput, Report
 from app.database import get_db, get_collection
@@ -61,12 +61,15 @@ def extract_top_skills(skills_dict: Dict, top_n: int = 5) -> List[Dict]:
         
     return result
 
-def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List) -> Dict:
+def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List, job: str, career_data: Optional[Dict] = None) -> Dict:
     """AI를 사용하여 이력서를 분석합니다."""
     logger.debug("=== 이력서 AI 분석 시작 ===")
     logger.debug(f"분석할 이력서 길이: {len(resume_text)} 자")
     logger.debug(f"트렌드 스킬: {trend_skills}")
     logger.debug(f"트렌드 JD: {[item['name'] for item in trend_jd]}")
+    logger.debug(f"사용자 선택 직무: {job}")
+    if career_data:
+        logger.debug(f"추가 경력 데이터: {json.dumps(career_data, ensure_ascii=False)[:200]}...")
     
     # API 키 가져오기
     clova_key = os.getenv("CLOVA_KEY")
@@ -96,6 +99,7 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List)
 각 필드 작성 지침:
 1. my_trend_skill:
    - 해당 직무의 대표 소프트스킬/하드스킬 중 지원자가 실제로 갖춘 것만 포함
+   - 반드시 하드 스킬과 소프트 스킬 모두에서 선택하여 균형있게 포함할 것
    - 지원자의 역량이 0-100점 척도로 60점 이상인 스킬만 포함
 
 2. personal_skill:
@@ -103,11 +107,13 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List)
    - 각 역량마다 반드시 description 필드 포함하여 근거 제시
    - 제시된 말투를 반드시 그대로 유지할 것
    - 근거는 반드시 이력서에 나타난 내용을 기반으로 작성할 것
+   - description 문구에 '치열한 ~님만의 강점'과 같은 표현에서 이름을 반드시 사용해야 함
 
 3. ai_summary:
    - 형식: "{사용자의 장점}하는 {희망직무}계의 {직무와 관련없는 비유 인물}"
    - 예시: "데이터로 고객 마음을 사로잡는 디자인계의 허준"
    - 짧고 임팩트 있는 한 문장으로 작성
+   - 중요: 희망직무는 반드시 사용자가 선택한 직무({job})를 정확히 그대로 사용할 것
 
 4. career_fitness:
    - 지원자의 이력서와 선택한 직무의 jd간 유사도를 백분위 숫자로 표현
@@ -120,7 +126,8 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List)
    - 해당 직군에 적합한/적합하지 않은 이유를 간략하게 제시
    - 긍정적이고 유익한 피드백 제공
    - 이력서와 희망 직무 간 불일치가 클 경우, 전환을 위해 필요한 보완점 중심으로 작성
-   - 예시 말투 유지: "프로덕트 디자이너에게 요구되는 핵심 역량을 두루 갖추고 있네요! 특히 데이터 기반 개선 경험이 강점입니다. 이를 더욱 돋보이게 하려면, 어떤 데이터를 활용했고, 구체적으로 어떤 문제를 해결했으며, 개선 결과가 사용자 경험이나 비즈니스 성과에 어떤 영향을 미쳤는지 정리해보면 더욱 효과적일 것입니다."
+   - 중요: 피드백에서 언급하는 직무는 사용자가 선택한 직무({job})와 반드시 일치해야 함
+   - 예시 말투 유지: "{job}에게 요구되는 핵심 역량을 두루 갖추고 있네요! 특히 데이터 기반 개선 경험이 강점입니다. 이를 더욱 돋보이게 하려면, 어떤 데이터를 활용했고, 구체적으로 어떤 문제를 해결했으며, 개선 결과가 사용자 경험이나 비즈니스 성과에 어떤 영향을 미쳤는지 정리해보면 더욱 효과적일 것입니다."
 """
     
     user_prompt = f"""다음 이력서를 분석하고 요청된 정보를 추출해주세요:
@@ -130,11 +137,53 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List)
 
 트렌드 스킬: {trend_skills}
 트렌드 JD: {[item['name'] for item in trend_jd]}
+사용자 선택 직무: {job}
+"""
 
+    # 경력 데이터가 있을 경우 프롬프트에 추가
+    if career_data:
+        career_text = "추가 경력 정보:\n"
+        
+        # 직업 경험 정보 추가
+        if "career" in career_data and career_data["career"]:
+            career_text += "경력:\n"
+            for idx, career in enumerate(career_data["career"], 1):
+                job_title = career.get("job", "")
+                company = career.get("company", "")
+                description = career.get("description", "")
+                
+                career_entry = f"{idx}. "
+                if job_title:
+                    career_entry += f"직무: {job_title}"
+                if company:
+                    career_entry += f", 회사: {company}"
+                career_entry += "\n"
+                if description:
+                    career_entry += f"   설명: {description}\n"
+                
+                career_text += career_entry
+        
+        # 활동 정보 추가
+        if "activities" in career_data and career_data["activities"]:
+            career_text += "\n활동:\n"
+            for idx, activity in enumerate(career_data["activities"], 1):
+                name = activity.get("name", "")
+                if name:
+                    career_text += f"{idx}. {name}\n"
+        
+        # 자격증 정보 추가
+        if "certifications" in career_data and career_data["certifications"]:
+            career_text += "\n자격증:\n"
+            for idx, cert in enumerate(career_data["certifications"], 1):
+                career_text += f"{idx}. {cert}\n"
+        
+        user_prompt += f"\n{career_text}"
+
+    user_prompt += """
 다음 정보를 추출해주세요:
 1. 이력서에 나타난 트렌드 스킬 (최대 4개)
 2. 이력서에 나타나지 않았지만 강조할만한 퍼스널 역량 4개 (역량명과 근거)
-3. 이력서에 대한 위트있는 한 문장 요약
+3. 이력서에 대한 위트있는 한 문장 요약 (사용자 선택 직무인 '{job}' 반드시 활용)
 4. 직무 적합도 점수(0-100)와 그 이유, 개선 제안
 
 반드시 JSON 형식으로만 응답해주세요."""
@@ -286,14 +335,136 @@ def validate_ai_result(result: Dict) -> bool:
 
 @router.post("")
 async def create_report(
-    user_json: str = Form(...),
-    file: UploadFile = File(...),
+    user_json: str = Form(
+        default='{"name": "홍길동", "exp": "new", "job": "backend"}',
+        description="사용자 정보를 담은 JSON 문자열 (이름, 경력 유형, 직무 코드를 포함)", 
+        example='{"name": "홍길동", "exp": "new", "job": "backend"}'
+    ),
+    career_data: Optional[str] = Form(
+        default=None,
+        description="사용자의 경력 정보를 담은 JSON 문자열 (/career/extract 또는 /career/experience/link API의 응답 + 사용자가 추가한 경력 정보)", 
+        example='{"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}'
+    ),
+    file: UploadFile = File(..., description="이력서 PDF 파일"),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ) -> Dict:
+    """
+    사용자의 이력서 PDF와 정보를 받아 경력 분석 보고서를 생성합니다.
+    
+    - **user_json**: 사용자 정보를 담은 JSON 문자열 (Form 데이터)
+      - name: 사용자 이름
+      - exp: 경력 유형 (new: 신입, old: 경력)
+      - job: 직무 코드
+        - 개발: frontend, backend, ai-ml, data
+        - 디자인: product-designer, graphic-designer, content-designer
+        - 기획/관리: planning, pm-po
+    - **career_data**: 사용자의 경력 정보를 담은 JSON 문자열 (/career/extract 또는 /career/experience/link API의 응답)
+      - career: 직업 경험 목록 (job, company, description 포함)
+      - activities: 활동 목록 (name 포함)
+      - certifications: 자격증 목록
+    - **file**: 이력서 PDF 파일
+    
+    **중요**: user_json 필드는 반드시 다음 형태의 평면 구조여야 합니다:
+    ```json
+    {"name": "홍길동", "exp": "new", "job": "frontend"}
+    ```
+    
+    **직무별 예시 데이터:**
+    - 프론트엔드 개발자: `{"name": "홍길동", "exp": "new", "job": "frontend"}`
+    - 백엔드 개발자: `{"name": "홍길동", "exp": "old", "job": "backend"}`
+    - AI/ML 개발자: `{"name": "홍길동", "exp": "new", "job": "ai-ml"}`
+    - 데이터 전문가: `{"name": "홍길동", "exp": "old", "job": "data"}`
+    - 제품 디자이너: `{"name": "홍길동", "exp": "new", "job": "product-designer"}`
+    - 기획자: `{"name": "홍길동", "exp": "old", "job": "planning"}`
+    - 프로덕트 매니저: `{"name": "홍길동", "exp": "new", "job": "pm-po"}`
+    
+    요청 예시 (Form-Data):
+    ```
+    user_json: {"name": "홍길동", "exp": "new", "job": "frontend"}
+    career_data: {"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}
+    file: [이력서.pdf]
+    ```
+    
+    응답 예시:
+    ```json
+    {
+    "user": {
+        "name": "홍길동",
+        "exp": "new",
+        "job": "product-designer"
+    },
+    "career_fitness": 50,
+    "trend_jd": [
+        {
+        "name": "문제 해결 능력",
+        "keyword": 95
+        },
+        {
+        "name": "다양한 직군과의 유연한 커뮤니케이션",
+        "keyword": 90
+        },
+        {
+        "name": "동시대적인 감각으로 폭넓은 컨셉 기획",
+        "keyword": 85
+        },
+        {
+        "name": "감각적인 비주얼 구현 능력",
+        "keyword": 80
+        },
+        {
+        "name": "팀 협업 능력",
+        "keyword": 75
+        }
+    ],
+    "trend_skill": [
+        "Figma",
+        "Adobe Illustrator",
+        "Adobe Photoshop",
+        "UI 디자인",
+        "웹 디자인"
+    ],
+    "my_trend_skill": [
+        "문제 해결 능력",
+        "다양한 직군과의 유연한 커뮤니케이션"
+    ],
+    "personal_skill": [
+        {
+        "skill": "체계적인 설계 능력",
+        "description": "이력서에서 계속해서 강조하는 점"
+        },
+        {
+        "skill": "문서화 능력",
+        "description": "KakaoCloud Technical Documentation Assistant 인턴 경험"
+        },
+        {
+        "skill": "오픈소스 활용 능력",
+        "description": "GitHub Actions, ArgoCD 등을 활용한 경험"
+        },
+        {
+        "skill": "트러블 슈팅 능력",
+        "description": "장애 대응 시간을 30분 이내로 단축한 경험 언급"
+        }
+    ],
+    "ai_summary": "체계적인 설계로 문제를 해결하는 product-designer계의 맥가이버",
+    "ai_review": "Product Designer로서 동시대적인 감각과 팀 협업 능력은 조금 부족하지만, 체계적인 설계와 문제 해결 능력은 뛰어나신 것 같아요! 지금까지의 설계 경험을 바탕으로 디자이너의 관점에서 제품을 설계해보는 건 어떠세요? 또 동시대적인 감각을 키우기 위해 다양한 디자인 트렌드를 공부하고, 팀 협업 능력을 향상시키기 위해 디자인 스프린트나 프로토타이핑 등의 방법을 활용해 볼 수도 있을 것 같습니다.",
+    "id": "67cbf25d213453b3b0966168"
+    }
+    ```
+    """
     try:
         # 사용자 정보 파싱
         user_data = json.loads(user_json)
         logger.info(f"Received user data: {user_data}")
+        
+        # 경력 데이터 파싱 (제공된 경우)
+        parsed_career_data = None
+        if career_data:
+            try:
+                parsed_career_data = json.loads(career_data)
+                logger.info(f"Received career data: {json.dumps(parsed_career_data, ensure_ascii=False)[:200]}...")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid career data format: {e}")
+                # 잘못된 JSON 형식이어도 계속 진행
         
         # 파일에서 텍스트 추출
         pdf_extractor = PDFExtractor()
@@ -301,8 +472,24 @@ async def create_report(
         logger.debug(f"이력서에서 추출된 텍스트 길이: {len(resume_text)} 자")
         
         # 직무별 스킬 데이터 로드
-        job = user_data.get('user', {}).get('job', '')
-        exp = user_data.get('user', {}).get('exp', 'new')
+        if 'user' in user_data and isinstance(user_data['user'], dict):
+            # 중첩된 구조: {"user": {"job": "...", "exp": "..."}}
+            job = user_data['user'].get('job', '')
+            exp = user_data['user'].get('exp', 'new')
+            name = user_data['user'].get('name', '')
+        else:
+            # 평면 구조: {"job": "...", "exp": "..."}
+            job = user_data.get('job', '')
+            exp = user_data.get('exp', 'new')
+            name = user_data.get('name', '')
+            
+        # job 값이 비어있으면 오류 반환
+        if not job:
+            raise HTTPException(
+                status_code=400,
+                detail="직무(job) 정보가 누락되었습니다. 유효한 직무 코드를 입력해주세요. (frontend, backend, ai-ml 등)"
+            )
+            
         logger.info(f"직무: {job}, 경력: {exp}")
         
         skills_data = load_job_skills(job, exp)
@@ -327,7 +514,7 @@ async def create_report(
         logger.debug(f"모든 통합 스킬: {all_skills}")
         
         # AI로 이력서 분석 - 통합 스킬 전달
-        ai_result = analyze_resume_with_ai(resume_text, all_skills, trend_jd)
+        ai_result = analyze_resume_with_ai(resume_text, all_skills, trend_jd, job, parsed_career_data)
         
         # AI 결과 검증 - 필수 필드가 모두 있는지 확인
         if not validate_ai_result(ai_result):
@@ -339,8 +526,8 @@ async def create_report(
         # 결과 데이터 구성 - 수정된 구조로 변경
         report_data = {
             "user": {
-                "name": user_data.get('name', ''),
-                "exp": user_data.get('exp', 'new'),  
+                "name": name,
+                "exp": exp,  
                 "job": job
             },
             "career_fitness": ai_result.get('career_fitness', 70),
@@ -352,6 +539,10 @@ async def create_report(
             "ai_review": ai_result.get('ai_review', '')
         }
         
+        # 경력 데이터가 있으면 포함
+        if parsed_career_data:
+            report_data["career_data"] = parsed_career_data
+            
         logger.debug(f"최종 보고서 데이터: {json.dumps(report_data, ensure_ascii=False, indent=2)}")
         
         # 결과 데이터에 필수 필드가 비어있는지 다시 한번 확인
