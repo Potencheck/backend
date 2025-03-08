@@ -5,7 +5,7 @@ import uuid
 import time
 import re
 import traceback
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.schemas.report_schema import CareerInputSchema, ReportInput, Report
 from app.database import get_db, get_collection
@@ -61,13 +61,15 @@ def extract_top_skills(skills_dict: Dict, top_n: int = 5) -> List[Dict]:
         
     return result
 
-def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List, job: str) -> Dict:
+def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List, job: str, career_data: Optional[Dict] = None) -> Dict:
     """AI를 사용하여 이력서를 분석합니다."""
     logger.debug("=== 이력서 AI 분석 시작 ===")
     logger.debug(f"분석할 이력서 길이: {len(resume_text)} 자")
     logger.debug(f"트렌드 스킬: {trend_skills}")
     logger.debug(f"트렌드 JD: {[item['name'] for item in trend_jd]}")
     logger.debug(f"사용자 선택 직무: {job}")
+    if career_data:
+        logger.debug(f"추가 경력 데이터: {json.dumps(career_data, ensure_ascii=False)[:200]}...")
     
     # API 키 가져오기
     clova_key = os.getenv("CLOVA_KEY")
@@ -97,6 +99,7 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List,
 각 필드 작성 지침:
 1. my_trend_skill:
    - 해당 직무의 대표 소프트스킬/하드스킬 중 지원자가 실제로 갖춘 것만 포함
+   - 반드시 하드 스킬과 소프트 스킬 모두에서 선택하여 균형있게 포함할 것
    - 지원자의 역량이 0-100점 척도로 60점 이상인 스킬만 포함
 
 2. personal_skill:
@@ -135,7 +138,48 @@ def analyze_resume_with_ai(resume_text: str, trend_skills: List, trend_jd: List,
 트렌드 스킬: {trend_skills}
 트렌드 JD: {[item['name'] for item in trend_jd]}
 사용자 선택 직무: {job}
+"""
 
+    # 경력 데이터가 있을 경우 프롬프트에 추가
+    if career_data:
+        career_text = "추가 경력 정보:\n"
+        
+        # 직업 경험 정보 추가
+        if "career" in career_data and career_data["career"]:
+            career_text += "경력:\n"
+            for idx, career in enumerate(career_data["career"], 1):
+                job_title = career.get("job", "")
+                company = career.get("company", "")
+                description = career.get("description", "")
+                
+                career_entry = f"{idx}. "
+                if job_title:
+                    career_entry += f"직무: {job_title}"
+                if company:
+                    career_entry += f", 회사: {company}"
+                career_entry += "\n"
+                if description:
+                    career_entry += f"   설명: {description}\n"
+                
+                career_text += career_entry
+        
+        # 활동 정보 추가
+        if "activities" in career_data and career_data["activities"]:
+            career_text += "\n활동:\n"
+            for idx, activity in enumerate(career_data["activities"], 1):
+                name = activity.get("name", "")
+                if name:
+                    career_text += f"{idx}. {name}\n"
+        
+        # 자격증 정보 추가
+        if "certifications" in career_data and career_data["certifications"]:
+            career_text += "\n자격증:\n"
+            for idx, cert in enumerate(career_data["certifications"], 1):
+                career_text += f"{idx}. {cert}\n"
+        
+        user_prompt += f"\n{career_text}"
+
+    user_prompt += """
 다음 정보를 추출해주세요:
 1. 이력서에 나타난 트렌드 스킬 (최대 4개)
 2. 이력서에 나타나지 않았지만 강조할만한 퍼스널 역량 4개 (역량명과 근거)
@@ -296,6 +340,11 @@ async def create_report(
         description="사용자 정보를 담은 JSON 문자열 (이름, 경력 유형, 직무 코드를 포함)", 
         example='{"name": "홍길동", "exp": "new", "job": "backend"}'
     ),
+    career_data: Optional[str] = Form(
+        default=None,
+        description="사용자의 경력 정보를 담은 JSON 문자열 (/career/extract 또는 /career/experience/link API의 응답 + 사용자가 추가한 경력 정보)", 
+        example='{"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}'
+    ),
     file: UploadFile = File(..., description="이력서 PDF 파일"),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ) -> Dict:
@@ -309,6 +358,10 @@ async def create_report(
         - 개발: frontend, backend, ai-ml, data
         - 디자인: product-designer, graphic-designer, content-designer
         - 기획/관리: planning, pm-po
+    - **career_data**: 사용자의 경력 정보를 담은 JSON 문자열 (/career/extract 또는 /career/experience/link API의 응답)
+      - career: 직업 경험 목록 (job, company, description 포함)
+      - activities: 활동 목록 (name 포함)
+      - certifications: 자격증 목록
     - **file**: 이력서 PDF 파일
     
     **중요**: user_json 필드는 반드시 다음 형태의 평면 구조여야 합니다:
@@ -328,6 +381,7 @@ async def create_report(
     요청 예시 (Form-Data):
     ```
     user_json: {"name": "홍길동", "exp": "new", "job": "frontend"}
+    career_data: {"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}
     file: [이력서.pdf]
     ```
     
@@ -402,6 +456,16 @@ async def create_report(
         user_data = json.loads(user_json)
         logger.info(f"Received user data: {user_data}")
         
+        # 경력 데이터 파싱 (제공된 경우)
+        parsed_career_data = None
+        if career_data:
+            try:
+                parsed_career_data = json.loads(career_data)
+                logger.info(f"Received career data: {json.dumps(parsed_career_data, ensure_ascii=False)[:200]}...")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid career data format: {e}")
+                # 잘못된 JSON 형식이어도 계속 진행
+        
         # 파일에서 텍스트 추출
         pdf_extractor = PDFExtractor()
         resume_text = pdf_extractor.extract_text_from_pdf(file)
@@ -450,7 +514,7 @@ async def create_report(
         logger.debug(f"모든 통합 스킬: {all_skills}")
         
         # AI로 이력서 분석 - 통합 스킬 전달
-        ai_result = analyze_resume_with_ai(resume_text, all_skills, trend_jd, job)
+        ai_result = analyze_resume_with_ai(resume_text, all_skills, trend_jd, job, parsed_career_data)
         
         # AI 결과 검증 - 필수 필드가 모두 있는지 확인
         if not validate_ai_result(ai_result):
@@ -475,6 +539,10 @@ async def create_report(
             "ai_review": ai_result.get('ai_review', '')
         }
         
+        # 경력 데이터가 있으면 포함
+        if parsed_career_data:
+            report_data["career_data"] = parsed_career_data
+            
         logger.debug(f"최종 보고서 데이터: {json.dumps(report_data, ensure_ascii=False, indent=2)}")
         
         # 결과 데이터에 필수 필드가 비어있는지 다시 한번 확인
