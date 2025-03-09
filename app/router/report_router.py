@@ -5,13 +5,15 @@ import uuid
 import time
 import re
 import traceback
-from typing import Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from typing import Dict, List, Optional, Any
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Body
+from fastapi.param_functions import Form as FormParam
 from app.schemas.report_schema import CareerInputSchema, ReportInput, Report
 from app.database import get_db, get_collection
 from app.util.pdf_extractor import PDFExtractor
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import requests
+from app.util.web_extractor import WebExtractor
 
 router = APIRouter(
     prefix="/report",
@@ -24,6 +26,14 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger("app")
+
+async def optional_file_upload(
+    file: Optional[UploadFile] = File(None)
+) -> Optional[UploadFile]:
+    """빈 파일 또는 None 값을 처리하기 위한 의존성 함수"""
+    if file and hasattr(file, 'filename') and file.filename:
+        return file
+    return None
 
 def load_job_skills(job: str, exp: str) -> Dict:
     """직무와 경력 정보에 맞는 skills json 파일을 로드합니다."""
@@ -345,11 +355,17 @@ async def create_report(
         description="사용자의 경력 정보를 담은 JSON 문자열 (/career/extract 또는 /career/experience/link API의 응답 + 사용자가 추가한 경력 정보)", 
         example='{"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}'
     ),
-    file: UploadFile = File(..., description="이력서 PDF 파일"),
-    db: AsyncIOMotorDatabase = Depends(get_db)
+    resume_url: Optional[str] = Form(
+        default=None,
+        description="이력서가 호스팅된 공개 URL (파일이 제공되지 않은 경우 필수)",
+        example="https://example.com/resume.html"
+    ),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    file: Optional[UploadFile] = Depends(optional_file_upload),
 ) -> Dict:
     """
-    사용자의 이력서 PDF와 정보를 받아 경력 분석 보고서를 생성합니다.
+    사용자의 이력서와 정보를 받아 경력 분석 보고서를 생성합니다.
+    이력서는 PDF 파일 업로드 또는 공개 URL을 통해 제공할 수 있습니다.
     
     - **user_json**: 사용자 정보를 담은 JSON 문자열 (Form 데이터)
       - name: 사용자 이름
@@ -362,7 +378,8 @@ async def create_report(
       - career: 직업 경험 목록 (job, company, description 포함)
       - activities: 활동 목록 (name 포함)
       - certifications: 자격증 목록
-    - **file**: 이력서 PDF 파일
+    - **file**: 이력서 PDF 파일 (선택 사항, resume_url이 제공되지 않은 경우 필수)
+    - **resume_url**: 이력서가 호스팅된 공개 URL (선택 사항, file이 제공되지 않은 경우 필수)
     
     **중요**: user_json 필드는 반드시 다음 형태의 평면 구조여야 합니다:
     ```json
@@ -378,11 +395,18 @@ async def create_report(
     - 기획자: `{"name": "홍길동", "exp": "old", "job": "planning"}`
     - 프로덕트 매니저: `{"name": "홍길동", "exp": "new", "job": "pm-po"}`
     
-    요청 예시 (Form-Data):
+    요청 예시 (Form-Data - 파일 업로드):
     ```
     user_json: {"name": "홍길동", "exp": "new", "job": "frontend"}
     career_data: {"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}
     file: [이력서.pdf]
+    ```
+    
+    요청 예시 (Form-Data - URL 제공):
+    ```
+    user_json: {"name": "홍길동", "exp": "new", "job": "frontend"}
+    career_data: {"career":[{"job":"KakaoCloud Technical Documentation Assistant - Intern","company":"KakaoEnterprise","description":"KakaoCloud Docs Tutorial 기획 & 구현"}],"activities":[{"name":"Cloud Club | AWS/Terraform 스터디"}],"certifications":["AWS Certified Solutions Architect Associate"]}
+    resume_url: https://example.com/resume.html
     ```
     
     응답 예시:
@@ -466,10 +490,35 @@ async def create_report(
                 logger.warning(f"Invalid career data format: {e}")
                 # 잘못된 JSON 형식이어도 계속 진행
         
-        # 파일에서 텍스트 추출
-        pdf_extractor = PDFExtractor()
-        resume_text = pdf_extractor.extract_text_from_pdf(file)
+        # 파일 또는 URL이 제공되었는지 확인
+        has_file = file is not None
+        has_url = resume_url is not None and resume_url.strip() != ""
+        
+        if not has_file and not has_url:
+            raise HTTPException(
+                status_code=400,
+                detail="이력서 파일 또는 URL이 제공되어야 합니다."
+            )
+        
+        # 이력서 텍스트 추출
+        resume_text = ""
+        if has_file:
+            logger.info(f"파일에서 이력서 텍스트 추출: {file.filename}")
+            pdf_extractor = PDFExtractor()
+            resume_text = pdf_extractor.extract_text_from_pdf(file)
+        elif has_url:
+            logger.info(f"URL에서 이력서 텍스트 추출: {resume_url}")
+            web_extractor = WebExtractor()
+            resume_text = web_extractor.extract_text_from_url(resume_url)
+        
         logger.debug(f"이력서에서 추출된 텍스트 길이: {len(resume_text)} 자")
+        
+        # 텍스트가 추출되었는지 확인
+        if not resume_text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="이력서에서 텍스트를 추출할 수 없습니다. 다른 형식의 이력서를 제공하거나 URL을 확인해주세요."
+            )
         
         # 직무별 스킬 데이터 로드
         if 'user' in user_data and isinstance(user_data['user'], dict):
