@@ -6,11 +6,18 @@ from fastapi import UploadFile
 from app.util.pdf_extractor import PDFExtractor
 from app.util.completion_excute import ResumeExtract
 from playwright.async_api import async_playwright
+import asyncio
 
 logger = logging.getLogger("app")
 
 
 class CareerServiceInterface(Protocol):
+    """경력 정보 추출 서비스의 인터페이스입니다."""
+    def extract_str_from_pdf(self, file: UploadFile) -> str:
+        pass
+
+    def extract_str_from_url(self, link_url: str) -> str:
+        pass
     def extract_career_from_pdf(self, file: UploadFile) -> Dict[str, Any]:
         """PDF에서 경력 정보를 추출합니다."""
         pass
@@ -27,6 +34,11 @@ class CareerService:
             host='https://clovastudio.stream.ntruss.com',
             request_id='89dab0b98f924b67afbb3110e7835477'
         )
+    def extract_str_from_pdf(self, file: UploadFile) -> str:
+        return self.pdf_extractor.extract_text_from_pdf(file)
+
+    def extract_str_from_url(self, link_url: str) -> str:
+        return asyncio.run(self.async_crawler(link_url))
 
     def extract_career_from_pdf(self, file: UploadFile) -> Dict[str, Any]:
         text = self.pdf_extractor.extract_text_from_pdf(file)
